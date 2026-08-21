@@ -27,14 +27,12 @@ def clean_db():
 
 
 def test_jwks_endpoint():
-    """Verify JWKS returns RS256 public key."""
+    """Verify endpoint returns HS256 algorithm metadata."""
     res = client.get("/.well-known/jwks.json")
     assert res.status_code == 200
     data = res.json()
+    assert data["algorithm"] == "HS256"
     assert "keys" in data
-    assert len(data["keys"]) > 0
-    assert data["keys"][0]["kty"] == "RSA"
-    assert data["keys"][0]["alg"] == "RS256"
 
 
 def test_guest_login_flow():

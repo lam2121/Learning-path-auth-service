@@ -8,7 +8,6 @@ Dịch vụ xác thực tập trung (**Identity Provider & Single Sign-On**) cho
 
 * **Python**: 3.10+ (Khuyên dùng Python 3.12)
 * **MySQL Server**: 8.0+
-* **OpenSSL**: Dùng để tạo cặp khóa RS256
 
 ---
 
@@ -30,17 +29,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Bước 4: Tạo cặp khóa mã hóa RS256 (Asymmetric Key Pair)
-```bash
-mkdir -p keys
-openssl genrsa -out keys/private_key.pem 2048
-openssl rsa -in keys/private_key.pem -pubout -out keys/public_key.pem
-chmod 600 keys/private_key.pem
-chmod 644 keys/public_key.pem
-```
-> *Lưu ý: `keys/private_key.pem` chỉ được lưu tại Auth Service, không commit lên git.*
-
-### Bước 5: Cấu hình biến môi trường `.env`
+### Bước 4: Cấu hình biến môi trường `.env`
 Sao chép file mẫu và điền thông tin cấu hình:
 
 ```bash
@@ -56,9 +45,9 @@ MYSQL_PASSWORD=your_mysql_password
 MYSQL_DB=auth_db
 MYSQL_PORT=3306
 
-# ── JWT RS256 ─────────────────────────────────────────────
-RSA_PRIVATE_KEY_PATH=keys/private_key.pem
-RSA_PUBLIC_KEY_PATH=keys/public_key.pem
+# ── JWT HS256 ─────────────────────────────────────────────
+JWT_SECRET_KEY=09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7
+JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
 JWT_ISSUER=https://english-practice.tma.com.vn/auth

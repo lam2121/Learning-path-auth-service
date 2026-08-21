@@ -24,9 +24,9 @@ class AppConfig(BaseSettings):
     DB_READ_TIMEOUT: int = 20
     DB_WRITE_TIMEOUT: int = 10
 
-    # ── JWT RS256 ─────────────────────────────────────────────────────────
-    RSA_PRIVATE_KEY_PATH: str = "keys/private_key.pem"
-    RSA_PUBLIC_KEY_PATH: str = "keys/public_key.pem"
+    # ── JWT HS256 ─────────────────────────────────────────────────────────
+    JWT_SECRET_KEY: str = "tma-english-practice-super-secret-jwt-key-2026-xyz789"
+    JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 

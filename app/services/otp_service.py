@@ -11,7 +11,6 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import app_config
-from app.core.security import get_private_key
 from app.models.otp_rate_limit import OtpRateLimit
 
 from jose import jwt
@@ -118,7 +117,6 @@ def clear_stored_otp(email: str) -> None:
 
 
 # ── OTP Purpose Token (for password reset flow) ──────────────────────────────
-
 def generate_otp_purpose_token(user_id: int, purpose: str) -> str:
     """Create a short-lived token that authorises a specific action (e.g.
     password reset) after OTP verification."""
@@ -130,14 +128,13 @@ def generate_otp_purpose_token(user_id: int, purpose: str) -> str:
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
     }
-    return jwt.encode(payload, get_private_key(), algorithm="RS256")
+    return jwt.encode(payload, app_config.JWT_SECRET_KEY, algorithm=app_config.JWT_ALGORITHM)
 
 
 def verify_otp_purpose_token(token: str) -> dict | None:
-    """Decode an OTP purpose token.  Returns payload or None."""
-    from app.core.security import get_public_key
+    """Decode an OTP purpose token. Returns payload or None."""
     try:
-        payload = jwt.decode(token, get_public_key(), algorithms=["RS256"])
+        payload = jwt.decode(token, app_config.JWT_SECRET_KEY, algorithms=[app_config.JWT_ALGORITHM])
         return payload
     except Exception:
         return None

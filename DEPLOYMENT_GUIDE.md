@@ -165,20 +165,7 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 1.3. Sinh cặp khóa RS256 riêng cho Production Server
-> ⚠️ **LƯU Ý BẢO MẬT**: Sinh cặp khóa mới trực tiếp trên Server. **KHÔNG** sao chép private key từ máy dev lên.
-
-```bash
-mkdir -p keys
-openssl genrsa -out keys/private_key.pem 2048
-openssl rsa -in keys/private_key.pem -pubout -out keys/public_key.pem
-
-# Phân quyền nghiêm ngặt cho Private Key
-chmod 600 keys/private_key.pem
-chmod 644 keys/public_key.pem
-```
-
-### 1.4. Thiết lập cấu hình `.env` trên Server
+### 1.3. Thiết lập cấu hình `.env` trên Server
 Tạo file `.env` tại `/var/www/auth-service/.env`:
 ```ini
 # ── Database Server ──────────────────────────────────────────
@@ -188,9 +175,9 @@ MYSQL_PASSWORD=MatKhauDatabaseServer
 MYSQL_DB=auth_db
 MYSQL_PORT=3306
 
-# ── JWT RS256 ────────────────────────────────────────────────
-RSA_PRIVATE_KEY_PATH=keys/private_key.pem
-RSA_PUBLIC_KEY_PATH=keys/public_key.pem
+# ── JWT HS256 ────────────────────────────────────────────────
+JWT_SECRET_KEY=09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7
+JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
 JWT_ISSUER=https://english-practice.tma.com.vn/auth
@@ -372,22 +359,20 @@ sudo systemctl restart careerpath-fastapi
 
 > **Mục tiêu**: Đưa TOEIC sang dùng Auth Service mà không làm gián đoạn các phiên làm bài thi của học viên đang học.
 
-### 3.1. Cập nhật TOEIC Backend (Cơ chế Dual-Verification)
-Cập nhật module xác thực JWT trên backend TOEIC để hỗ trợ đồng thời 2 loại token:
+### 3.1. Cập nhật TOEIC Backend
+Cập nhật module xác thực JWT trên backend TOEIC sử dụng chung `JWT_SECRET_KEY` với thuật toán HS256:
 ```python
 # TOEIC Backend auth dependency:
 def get_current_user(token: str):
-    # Bước 1: Thử verify RS256 token mới từ Auth Service (qua JWKS)
     try:
-        payload = verify_rs256_token(token, jwks_url="http://127.0.0.1:8001/.well-known/jwks.json")
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=["HS256"],
+            issuer="https://english-practice.tma.com.vn/auth",
+            options={"verify_aud": False},
+        )
         return get_or_sync_user(payload)
-    except Exception:
-        pass
-
-    # Bước 2 (Fallback): Chấp nhận HS256 token cũ mà user đang giữ từ trước
-    try:
-        payload = verify_legacy_hs256_token(token, secret=LEGACY_SECRET_KEY)
-        return get_legacy_user(payload)
     except Exception:
         raise AuthenticationFailed("Token không hợp lệ hoặc đã hết hạn")
 ```
@@ -428,6 +413,7 @@ Nếu phát sinh sự cố ở bất kỳ bước nào:
 | **Cookie Secure** | `false` (HTTP) | `true` (HTTPS bắt buộc) |
 | **Cookie SameSite** | `lax` | `lax` |
 | **Bắt buộc OTP khi ĐK** | `false` (tiện test) | `true` (bảo mật production) |
+| **JWT Algorithm** | `HS256` | `HS256` |
+| **JWT Secret Key** | Dùng chung trong `.env` | Dùng chung trong `.env` trên Server |
 | **JWT Issuer** | `https://english-practice.tma.com.vn/auth` | `https://english-practice.tma.com.vn/auth` |
-| **RSA Key Pair** | Local generated (`keys/`) | Tạo độc lập trên Server (`chmod 600`) |
 | **Uvicorn Runner** | `--reload --host 0.0.0.0` | `--workers 2 --host 127.0.0.1` qua Systemd |

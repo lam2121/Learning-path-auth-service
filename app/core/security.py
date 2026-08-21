@@ -25,95 +25,61 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-# ── RS256 Key Loading ─────────────────────────────────────────────────────────
-
-_project_root = Path(__file__).resolve().parents[2]
-
-
-def _load_key(relative_path: str) -> str:
-    key_path = _project_root / relative_path
-    return key_path.read_text()
-
-
-_private_key: str | None = None
-_public_key: str | None = None
-
-
-def get_private_key() -> str:
-    global _private_key
-    if _private_key is None:
-        _private_key = _load_key(app_config.RSA_PRIVATE_KEY_PATH)
-    return _private_key
-
-
-def get_public_key() -> str:
-    global _public_key
-    if _public_key is None:
-        _public_key = _load_key(app_config.RSA_PUBLIC_KEY_PATH)
-    return _public_key
-
-
-
+# ── HS256 Token Creation ──────────────────────────────────────────────────────
 def create_access_token(data: dict) -> str:
-    """Create a short-lived RS256 access token (default 30 min)."""
+    """Create a short-lived HS256 access token (default 30 min)."""
     to_encode = data.copy()
     now = datetime.now(timezone.utc)
     expire = now + timedelta(minutes=app_config.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({
         "iss": app_config.JWT_ISSUER,
-        "aud": app_config.JWT_AUDIENCE.split(","),
+        "aud": [a.strip() for a in app_config.JWT_AUDIENCE.split(",")],
         "jti": uuid.uuid4().hex,
         "token_type": "access",
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
     })
-    return jwt.encode(to_encode, get_private_key(), algorithm="RS256")
+    return jwt.encode(to_encode, app_config.JWT_SECRET_KEY, algorithm=app_config.JWT_ALGORITHM)
 
 
 def create_refresh_token(data: dict) -> str:
-    """Create a long-lived RS256 refresh token (default 7 days)."""
+    """Create a long-lived HS256 refresh token (default 7 days)."""
     to_encode = data.copy()
     now = datetime.now(timezone.utc)
     expire = now + timedelta(days=app_config.REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode.update({
         "iss": app_config.JWT_ISSUER,
-        "aud": app_config.JWT_AUDIENCE.split(","),
+        "aud": [a.strip() for a in app_config.JWT_AUDIENCE.split(",")],
         "jti": uuid.uuid4().hex,
         "token_type": "refresh",
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
     })
-    return jwt.encode(to_encode, get_private_key(), algorithm="RS256")
+    return jwt.encode(to_encode, app_config.JWT_SECRET_KEY, algorithm=app_config.JWT_ALGORITHM)
 
 
 # ── JWT Verification ─────────────────────────────────────────────────────────
 
 def verify_token(token: str, expected_type: str = "access", expected_audience: str | None = None) -> dict | None:
-    """Decode and validate an RS256 JWT token.
+    """Decode and validate an HS256 JWT token.
 
     Returns the payload dict on success, or ``None`` if the token is invalid,
     expired, or has the wrong ``token_type``.
     """
     try:
-        # python-jose requires `audience` to be a string, not a list.
-        # The token's "aud" is a list like ["toeic", "careerpath"].
-        # We try each configured audience until decode succeeds.
-        configured_audiences = app_config.JWT_AUDIENCE.split(",")
-
+        configured_audiences = [a.strip() for a in app_config.JWT_AUDIENCE.split(",")]
         payload = None
-        last_error = None
         for aud in configured_audiences:
             try:
                 payload = jwt.decode(
                     token,
-                    get_public_key(),
-                    algorithms=["RS256"],
+                    app_config.JWT_SECRET_KEY,
+                    algorithms=[app_config.JWT_ALGORITHM],
                     issuer=app_config.JWT_ISSUER,
-                    audience=aud.strip(),
+                    audience=aud,
                 )
                 break  # decode succeeded
-            except JWTError as e:
-                last_error = e
+            except JWTError:
                 continue
 
         if payload is None:
@@ -122,7 +88,6 @@ def verify_token(token: str, expected_type: str = "access", expected_audience: s
         if payload.get("token_type") != expected_type:
             return None
 
-        # Additional audience check if a specific audience is expected
         if expected_audience:
             token_aud = payload.get("aud")
             if isinstance(token_aud, list):
