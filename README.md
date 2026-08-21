@@ -1,93 +1,155 @@
-# auth-service
+# TMA English Practice — Central Auth Microservice
 
+Dịch vụ xác thực tập trung (**Identity Provider & Single Sign-On**) cho 2 ứng dụng **TOEIC** và **CareerPath**.
 
+---
 
-## Getting started
+## 1. Yêu Cầu Hệ Thống (Prerequisites)
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+* **Python**: 3.10+ (Khuyên dùng Python 3.12)
+* **MySQL Server**: 8.0+
+* **OpenSSL**: Dùng để tạo cặp khóa RS256
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+---
 
-## Add your files
+## 2. Hướng Dẫn Cài Đặt Từ Đầu (Installation)
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
+### Bước 1: Di chuyển vào thư mục dự án
+```bash
+cd auth-service
 ```
-cd existing_repo
-git remote add origin https://gitsdc.tma.com.vn/careerpath-english/auth-service.git
-git branch -M main
-git push -uf origin main
+
+### Bước 2: Tạo và kích hoạt môi trường ảo (Virtual Environment)
+```bash
+python3 -m venv venv
+source venv/bin/activate
 ```
 
-## Integrate with your tools
+### Bước 3: Cài đặt các thư viện phụ thuộc
+```bash
+pip install -r requirements.txt
+```
 
-* [Set up project integrations](https://gitsdc.tma.com.vn/careerpath-english/auth-service/-/settings/integrations)
+### Bước 4: Tạo cặp khóa mã hóa RS256 (Asymmetric Key Pair)
+```bash
+mkdir -p keys
+openssl genrsa -out keys/private_key.pem 2048
+openssl rsa -in keys/private_key.pem -pubout -out keys/public_key.pem
+chmod 600 keys/private_key.pem
+chmod 644 keys/public_key.pem
+```
+> *Lưu ý: `keys/private_key.pem` chỉ được lưu tại Auth Service, không commit lên git.*
 
-## Collaborate with your team
+### Bước 5: Cấu hình biến môi trường `.env`
+Sao chép file mẫu và điền thông tin cấu hình:
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+```bash
+cp .env.example .env
+```
 
-## Test and Deploy
+Nội dung `.env`:
+```ini
+# ── Database ──────────────────────────────────────────────
+MYSQL_HOST=localhost
+MYSQL_USER=root
+MYSQL_PASSWORD=your_mysql_password
+MYSQL_DB=auth_db
+MYSQL_PORT=3306
 
-Use the built-in continuous integration in GitLab.
+# ── JWT RS256 ─────────────────────────────────────────────
+RSA_PRIVATE_KEY_PATH=keys/private_key.pem
+RSA_PUBLIC_KEY_PATH=keys/public_key.pem
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+REFRESH_TOKEN_EXPIRE_DAYS=7
+JWT_ISSUER=https://english-practice.tma.com.vn/auth
+JWT_AUDIENCE=toeic,careerpath
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+# ── OTP & Rate Limit ──────────────────────────────────────
+REQUIRE_REGISTER_OTP=false
+OTP_EXPIRES_MINUTES=5
+OTP_MAX_REQUESTS_PER_WINDOW=3
+OTP_RATE_LIMIT_WINDOW_MINUTES=10
+OTP_MAX_VERIFY_ATTEMPTS=5
 
-***
+# ── SMTP (Gửi OTP qua Email) ──────────────────────────────
+EMAIL_SENDER=training@tma.com.vn
+EMAIL_USERNAME=your_email@tma.com.vn
+EMAIL_PASSWORD=your_email_password
+EMAIL_SMTP_SERVER=smtp.office365.com
+EMAIL_SMTP_PORT=587
 
-# Editing this README
+# ── Cookie (SSO) ──────────────────────────────────────────
+COOKIE_DOMAIN=localhost
+COOKIE_SECURE=false
+COOKIE_SAMESITE=lax
+```
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+### Bước 6: Khởi tạo Database & Chạy Alembic Migration
+```bash
+# Tạo database auth_db (nếu chưa có)
+python3 -c "
+import pymysql, os
+conn = pymysql.connect(host='localhost', user='root', password='your_mysql_password', port=3306)
+with conn.cursor() as cur:
+    cur.execute('CREATE DATABASE IF NOT EXISTS auth_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci')
+conn.close()
+print('Database auth_db ready!')
+"
 
-## Suggestions for a good README
+# Chạy Alembic migration
+alembic upgrade head
+```
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+### Bước 7 (Tùy chọn): Migrate tài khoản từ TOEIC sang Auth DB
+Nếu bạn muốn chuyển toàn bộ User hiện có từ Database TOEIC sang Auth Service:
+```bash
+venv/bin/python3 migrate_toeic_users.py --toeic-db toeic
+```
 
-## Name
-Choose a self-explaining name for your project.
+---
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+## 3. Hướng Dẫn Chạy Service (Run)
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+### A. Chạy ở chế độ Development (Auto-reload khi sửa code)
+```bash
+source venv/bin/activate
+uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+```
+* Service sẽ chạy tại: `http://localhost:8001` (hoặc `http://<IP_LAN>:8001`).
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+### B. Chạy ngầm trong Background
+```bash
+nohup venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8001 > auth_service.log 2>&1 &
+```
+* Xem log: `tail -f auth_service.log`
+* Dừng service: `pkill -f "uvicorn app.main:app --port 8001"`
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+---
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+## 4. Kiểm Thử Hệ Thống (Testing)
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+Chạy bộ test suite tự động với `pytest`:
+```bash
+venv/bin/pytest tests/ -v
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+---
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+## 5. Danh Sách API Endpoints Chính
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+| Method | Endpoint | Mô tả |
+| :--- | :--- | :--- |
+| `GET` | `/health` | Kiểm tra trạng thái hoạt động của Service |
+| `GET` | `/.well-known/jwks.json` | Cung cấp RS256 Public Key (JWKS) cho TOEIC & CareerPath |
+| `POST` | `/api/auth/register` | Đăng ký tài khoản (hỗ trợ trực tiếp hoặc qua OTP) |
+| `POST` | `/api/auth/register/otp` | Gửi mã OTP xác nhận đăng ký |
+| `POST` | `/api/auth/login` | Đăng nhập (Email/Username) $\rightarrow$ Cấp RS256 Token & HttpOnly Cookie |
+| `POST` | `/api/auth/refresh-token`| Cấp lại Access Token mới (hỗ trợ đọc từ HttpOnly Cookie) |
+| `POST` | `/api/auth/logout` | Đăng xuất (thu hồi Refresh Token trong DB + xóa Cookie) |
+| `POST` | `/api/auth/password/otp` | Gửi OTP quên mật khẩu |
+| `POST` | `/api/auth/password/otp/verify` | Xác thực OTP đổi mật khẩu |
+| `PUT` | `/api/auth/password/reset` | Đặt lại mật khẩu mới |
+| `GET` | `/api/auth/me` | Lấy thông tin tài khoản hiện tại |
+| `GET` | `/api/auth/verify-token` | Xác thực nhanh Token cho các backend nội bộ |
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+📖 **Tài liệu Swagger UI tương tác trực quan**: Truy cập [http://localhost:8001/docs](http://localhost:8001/docs).
