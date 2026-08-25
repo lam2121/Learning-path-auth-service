@@ -46,19 +46,28 @@ class RegisterOtpRequest(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    email: EmailStr
-    username: str
+    email: str
+    username: Optional[str] = None
     password: str
     full_name: Optional[str] = None
+    name: Optional[str] = None
     otp: Optional[str] = None
     role: Optional[str] = UserRole.EMPLOYEE
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = str(v).strip().lower()
+        if not v or "@" not in v:
+            raise ValueError("Email không hợp lệ.")
+        return v
 
     @field_validator("password")
     @classmethod
     def validate_password(cls, v: str) -> str:
-        if not v or len(v.strip()) < 6:
+        if not v or len(str(v).strip()) < 6:
             raise ValueError("Password must be at least 6 characters long")
-        return v
+        return str(v)
 
     @field_validator("role", mode="before")
     @classmethod

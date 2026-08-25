@@ -121,35 +121,82 @@ async def request_register_otp(req: RegisterOtpRequest, db: Session = Depends(ge
 # ── Register ──────────────────────────────────────────────────────────────────
 
 @router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
-async def register(req: RegisterRequest, response: Response, db: Session = Depends(get_db)):
-    email_clean = req.email.strip()
-    username_clean = req.username.strip()
+async def register(request: Request, response: Response, db: Session = Depends(get_db)):
+    data = {}
+    content_type = request.headers.get("content-type", "").lower()
+
+    if "application/json" in content_type:
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                data = body
+        except Exception:
+            pass
+    elif "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
+        try:
+            form = await request.form()
+            data = dict(form)
+        except Exception:
+            pass
+    else:
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                data = body
+        except Exception:
+            try:
+                form = await request.form()
+                data = dict(form)
+            except Exception:
+                pass
+
+    email = str(data.get("email", "")).strip().lower()
+    password = str(data.get("password", "")).strip()
+    username = str(data.get("username") or "").strip()
+    full_name = str(data.get("full_name") or data.get("name") or data.get("fullName") or "").strip()
+    otp = str(data.get("otp") or "").strip() or None
+    role = str(data.get("role") or "employee").strip().lower()
+    if role not in ("admin", "employee"):
+        role = "employee"
+
+    if not email or "@" not in email:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Vui lòng cung cấp email hợp lệ.")
+    if not password or len(password) < 6:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Mật khẩu phải có ít nhất 6 ký tự.")
+
+    if not username:
+        username = email.split("@")[0]
+        base_username = username
+        counter = 1
+        while get_user_by_username(db, username):
+            username = f"{base_username}{counter}"
+            counter += 1
 
     # Verify OTP if provided or required
-    if req.otp:
-        cached_otp = get_stored_otp(email_clean)
+    if otp:
+        cached_otp = get_stored_otp(email)
         if not cached_otp:
             raise HTTPException(status_code=400, detail="OTP đã hết hạn hoặc chưa được yêu cầu.")
-        if cached_otp != req.otp:
+        if cached_otp != otp:
             raise HTTPException(status_code=400, detail="Mã OTP không chính xác.")
-        clear_stored_otp(email_clean)
+        clear_stored_otp(email)
     elif app_config.REQUIRE_REGISTER_OTP:
         raise HTTPException(status_code=400, detail="Vui lòng yêu cầu mã OTP trước khi đăng ký.")
 
     # Check duplicate
-    if get_user_by_email(db, email_clean):
+    if get_user_by_email(db, email):
         raise HTTPException(status_code=400, detail="Email đã được đăng ký.")
-    if get_user_by_username(db, username_clean):
+    if get_user_by_username(db, username):
         raise HTTPException(status_code=400, detail="Username đã được sử dụng. Vui lòng chọn username khác.")
 
     # Create user
     user = create_user(
         db,
-        username=username_clean,
-        email=email_clean,
-        password=req.password,
-        full_name=req.full_name.strip() if req.full_name else None,
-        role=req.role,
+        username=username,
+        email=email,
+        password=password,
+        full_name=full_name if full_name else None,
+        role=role,
     )
 
     # Issue tokens
