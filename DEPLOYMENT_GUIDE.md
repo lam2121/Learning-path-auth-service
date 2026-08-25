@@ -1,6 +1,6 @@
-# Hướng Dẫn Cài Đặt, Kiểm Tra & Triển Khai Auth Service (Production Deployment Guide)
+# Hướng Dẫn Cài Đặt, Kiểm Tra & Triển Khai Auth Service (Cross-Platform Deployment Guide)
 
-> **Mục tiêu**: Hướng dẫn toàn diện từ khâu **kiểm tra tại Local (máy dev)** đến **triển khai lên Server Production** (`https://english-practice.tma.com.vn`) theo quy trình **Zero-Downtime 3 Giai Đoạn**, đảm bảo không gây gián đoạn cho học viên đang sử dụng hệ thống.
+> **Mục tiêu**: Hướng dẫn toàn diện từ khâu **kiểm tra tại Local (hỗ trợ cả Windows & Linux/macOS)** đến **triển khai lên Server Production** (`https://english-practice.tma.com.vn`) theo quy trình **Zero-Downtime 3 Giai Đoạn**, đảm bảo không gây gián đoạn cho học viên đang sử dụng hệ thống.
 
 ---
 
@@ -8,9 +8,9 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ GIAI ĐOẠN 0: Kiểm tra toàn diện tại Local (Máy Dev)         │
+│ GIAI ĐOẠN 0: Kiểm tra toàn diện tại Local (Windows / Linux) │
 │ • Chạy Pytest suite (6/6 test cases)                        │
-│ • Smoke test qua cURL (Register, Login, Token, JWKS)        │
+│ • Smoke test qua cURL hoặc Swagger UI (/docs)               │
 │ • Xác nhận dữ liệu và chuẩn hóa Role (admin / employee)     │
 └──────────────────────────────┬──────────────────────────────┘
                                │
@@ -19,7 +19,7 @@
 │ GIAI ĐOẠN 1: Triển khai Auth Service độc lập lên Server     │
 │ (Rủi ro = 0% — TOEIC & CareerPath hiện tại không bị ảnh hưởng)│
 │ • Clone repo Git lên server: /var/www/auth-service          │
-│ • Cài venv, sinh khóa RSA private/public riêng cho server   │
+│ • Cài venv, cấu hình .env (HS256 Secret Key)                │
 │ • Tạo auth_db, chạy Alembic migration & migrate user cũ     │
 │ • Thiết lập Systemd service chạy ngầm trên port 8001        │
 └──────────────────────────────┬──────────────────────────────┘
@@ -28,7 +28,7 @@
 ┌─────────────────────────────────────────────────────────────┐
 │ GIAI ĐOẠN 2: Mở Nginx Reverse Proxy & Tích hợp CareerPath    │
 │ (Rủi ro = 0% đối với TOEIC)                                 │
-│ • Nginx định tuyến /api/auth/ & /.well-known/jwks.json      │
+│ • Nginx định tuyến /api/auth/                               │
 │ • Tích hợp & kiểm thử toàn bộ luồng CareerPath              │
 └──────────────────────────────┬──────────────────────────────┘
                                │
@@ -36,7 +36,7 @@
 ┌─────────────────────────────────────────────────────────────┐
 │ GIAI ĐOẠN 3: Chuyển đổi TOEIC & Kích hoạt Single Sign-On    │
 │ (Zero-Downtime — Học viên đang làm bài không bị văng ra)    │
-│ • Backend TOEIC áp dụng cơ chế Dual-Verification            │
+│ • Backend TOEIC verify JWT qua chung JWT_SECRET_KEY (HS256) │
 │ • Frontend TOEIC chuyển endpoint đăng nhập/đăng ký          │
 │ • Kiểm thử SSO liên thông 2 chiều TOEIC ↔ CareerPath        │
 └─────────────────────────────────────────────────────────────┘
@@ -46,87 +46,155 @@
 
 ## 🧪 GIAI ĐOẠN 0: Kiểm Tra Tại Local (Máy Dev)
 
-> **Thực hiện trên máy local trước khi tiến hành deploy lên server.**
+> **Hỗ trợ đầy đủ lệnh cho cả Windows (PowerShell) và Linux / macOS (Bash).**
 
-### 0.1. Khởi động Auth Service tại local
-```bash
-cd /home/intern-hkloi/Project/Toeic/auth-service
-source venv/bin/activate
+### 0.1. Cài đặt Môi Trường & Khởi Động Auth Service
+
+#### 👉 Trên Windows (PowerShell):
+```powershell
+# 1. Di chuyển vào thư mục dự án
+cd auth-service
+
+# 2. Tạo và kích hoạt môi trường ảo
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+
+# 3. Cài đặt thư viện
+pip install -r requirements.txt
+
+# 4. Tạo file .env từ mẫu
+Copy-Item .env.example .env
+
+# 5. Khởi động Auth Service (Viết trên 1 dòng duy nhất)
 uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
-### 0.2. Chạy bộ kiểm thử tự động (Pytest)
+#### 👉 Trên Linux / macOS (Bash):
 ```bash
-cd /home/intern-hkloi/Project/Toeic/auth-service
-venv/bin/pytest tests/ -v
+# 1. Di chuyển vào thư mục dự án
+cd auth-service
+
+# 2. Tạo và kích hoạt môi trường ảo
+python3 -m venv venv
+source venv/bin/activate
+
+# 3. Cài đặt thư viện
+pip install -r requirements.txt
+
+# 4. Tạo file .env từ mẫu
+cp .env.example .env
+
+# 5. Khởi động Auth Service
+uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
-**Kết quả yêu cầu đạt 100%:**
+---
+
+### 0.2. Chạy Bộ Kiểm Thử Tự Động (Pytest)
+
+> Mở một cửa sổ Terminal mới (đã kích hoạt `venv`):
+
+#### 👉 Trên Windows (PowerShell):
+```powershell
+cd auth-service
+pytest tests/ -v
+# Hoặc chạy trực tiếp: .\venv\Scripts\pytest.exe tests/ -v
 ```
-tests/test_auth_endpoints.py::test_health_check              PASSED
-tests/test_auth_endpoints.py::test_jwks_endpoint             PASSED
-tests/test_auth_endpoints.py::test_register_and_login        PASSED
-tests/test_auth_endpoints.py::test_access_token_payload      PASSED
-tests/test_otp_rate_limit.py::test_otp_rate_limit            PASSED
-tests/test_cross_app_jwt.py::test_refresh_token              PASSED
+
+#### 👉 Trên Linux / macOS (Bash):
+```bash
+cd auth-service
+pytest tests/ -v
+# Hoặc chạy trực tiếp: venv/bin/pytest tests/ -v
+```
+
+**Kết quả yêu cầu đạt 100% (6/6 pass):**
+```
+tests/test_auth_endpoints.py::test_jwks_endpoint PASSED                  [ 16%]
+tests/test_auth_endpoints.py::test_guest_login_flow PASSED               [ 33%]
+tests/test_auth_endpoints.py::test_registration_and_login_flow PASSED    [ 50%]
+tests/test_auth_endpoints.py::test_password_reset_flow PASSED            [ 66%]
+tests/test_cross_app_jwt.py::test_cross_app_hs256_verification PASSED    [ 83%]
+tests/test_otp_rate_limit.py::test_otp_rate_limit_exceeded PASSED        [100%]
 ======================== 6 passed in Xs ========================
 ```
 
-### 0.3. Smoke test thủ công với cURL
+---
+
+### 0.3. Smoke Test Thủ Công
+
+Bạn có thể test trực tiếp qua **Swagger UI tại trình duyệt** hoặc dùng **cURL**:
+
+* 📖 **Swagger UI trực quan**: Mở trình duyệt truy cập [http://localhost:8001/docs](http://localhost:8001/docs)
 
 #### 1. Kiểm tra trạng thái Service:
-```bash
-curl -s http://localhost:8001/health | jq .
-```
-*Kết quả mong đợi:* `{"status": "ok", "service": "auth-service"}`
+* **Windows (PowerShell)**:
+  ```powershell
+  curl.exe -s http://localhost:8001/health
+  ```
+* **Linux / macOS**:
+  ```bash
+  curl -s http://localhost:8001/health
+  ```
+* *Kết quả mong đợi:* `{"status":"ok","service":"auth-service"}`
 
-#### 2. Kiểm tra JWKS Public Key:
-```bash
-curl -s http://localhost:8001/.well-known/jwks.json | jq .
-```
-*Kết quả mong đợi:* JSON chứa mảng `keys` với thuật toán `RS256`.
+#### 2. Test Đăng ký tài khoản mới:
+* **Windows (PowerShell)**:
+  ```powershell
+  curl.exe -s -X POST http://localhost:8001/api/auth/register `
+    -H "Content-Type: application/json" `
+    -d '{\"email\":\"test_dev@tma.com.vn\",\"username\":\"test_dev\",\"password\":\"Password123@\",\"full_name\":\"Test Developer\"}'
+  ```
+* **Linux / macOS**:
+  ```bash
+  curl -s -X POST http://localhost:8001/api/auth/register \
+    -H "Content-Type: application/json" \
+    -d '{
+      "email": "test_dev@tma.com.vn",
+      "username": "test_dev",
+      "password": "Password123@",
+      "full_name": "Test Developer"
+    }'
+  ```
 
-#### 3. Test Đăng ký tài khoản mới:
-```bash
-curl -s -X POST http://localhost:8001/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "test_dev@tma.com.vn",
-    "username": "test_dev",
-    "password": "Password123@",
-    "full_name": "Test Developer"
-  }' | jq .
-```
+#### 3. Test Đăng nhập:
+* **Windows (PowerShell)**:
+  ```powershell
+  curl.exe -s -X POST http://localhost:8001/api/auth/login `
+    -H "Content-Type: application/json" `
+    -d '{\"credential\":\"test_dev@tma.com.vn\",\"password\":\"Password123@\"}'
+  ```
+* **Linux / macOS**:
+  ```bash
+  curl -s -X POST http://localhost:8001/api/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{
+      "credential": "test_dev@tma.com.vn",
+      "password": "Password123@"
+    }'
+  ```
 
-#### 4. Test Đăng nhập:
-```bash
-curl -s -X POST http://localhost:8001/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "credential": "test_dev@tma.com.vn",
-    "password": "Password123@"
-  }' | jq .
-```
+---
 
-#### 5. Giải mã và xác thực Claims trong Token JWT:
-```bash
-# Thay thế chuỗi token lấy từ bước đăng nhập
-python3 -c "
-import base64, json
-token = 'PASTE_YOUR_ACCESS_TOKEN_HERE'
-payload = token.split('.')[1]
-payload += '=' * (4 - len(payload) % 4)
-data = json.loads(base64.b64decode(payload))
-print('Decoded JWT Claims:')
-print(json.dumps(data, indent=2))
-assert data['role'] in ['admin', 'employee'], 'Role không hợp lệ!'
-print('✅ Role claim hợp lệ:', data['role'])
+### 0.4. Kiểm Tra Dữ Liệu và Role trong `auth_db.users`
+
+#### 👉 Trên Windows (PowerShell):
+```powershell
+python -c "
+import pymysql
+conn = pymysql.connect(host='localhost', user='root', password='123456x@X', port=3306)
+with conn.cursor() as cur:
+    cur.execute('SELECT role, COUNT(*) FROM auth_db.users GROUP BY role ORDER BY role;')
+    print('Thong ke Role trong auth_db.users:')
+    for r in cur.fetchall():
+        print(f'  Role: {r[0]:<12} So luong: {r[1]}')
+conn.close()
 "
 ```
 
-### 0.4. Kiểm tra dữ liệu và Role trong `auth_db.users`
+#### 👉 Trên Linux / macOS (Bash):
 ```bash
-venv/bin/python3 -c "
+python3 -c "
 import pymysql
 conn = pymysql.connect(host='localhost', user='root', password='123456x@X', port=3306)
 with conn.cursor() as cur:
@@ -178,7 +246,7 @@ MYSQL_PORT=3306
 # ── JWT HS256 ────────────────────────────────────────────────
 JWT_SECRET_KEY=09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7
 JWT_ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
 REFRESH_TOKEN_EXPIRE_DAYS=7
 JWT_ISSUER=https://english-practice.tma.com.vn/auth
 JWT_AUDIENCE=toeic,careerpath
@@ -203,44 +271,30 @@ COOKIE_SECURE=true
 COOKIE_SAMESITE=lax
 ```
 
-### 1.5. Khởi tạo Database `auth_db` & Chạy Alembic Migration
+### 1.4. Khởi tạo Database `auth_db` & Chạy Alembic Migration
 ```bash
 # 1. Tạo database auth_db trên MySQL Server
-python3 -c "
-import pymysql, os
-from dotenv import load_dotenv
-load_dotenv()
-conn = pymysql.connect(
-    host=os.getenv('MYSQL_HOST', '127.0.0.1'),
-    user=os.getenv('MYSQL_USER', 'root'),
-    password=os.getenv('MYSQL_PASSWORD'),
-    port=int(os.getenv('MYSQL_PORT', 3306))
-)
-with conn.cursor() as cur:
-    cur.execute('CREATE DATABASE IF NOT EXISTS auth_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci')
-    print('✅ Database auth_db đã được tạo thành công!')
-conn.close()
-"
+python3 create_db.py
 
 # 2. Tạo các bảng users, refresh_tokens, otp_rate_limit qua Alembic
 alembic upgrade head
 ```
 
-### 1.6. Đồng bộ dữ liệu User từ TOEIC & CareerPath sang `auth_db`
+### 1.5. Đồng bộ dữ liệu User từ TOEIC & CareerPath sang `auth_db`
 Chạy script migration để chuyển toàn bộ user hiện tại vào Central Auth DB (mật khẩu Bcrypt được giữ nguyên 100%):
 ```bash
 # Migrate từ database TOEIC
-venv/bin/python3 migrate_toeic_users.py --toeic-db toeic
+python3 migrate_toeic_users.py --toeic-db toeic
 
 # Migrate từ database CareerPath (nếu có)
-venv/bin/python3 migrate_toeic_users.py --toeic-db toeic_learningpath
+python3 migrate_toeic_users.py --toeic-db toeic_learningpath
 ```
 
-### 1.7. Cấu hình Systemd Daemon Service
+### 1.6. Cấu hình Systemd Daemon Service
 Tạo file `/etc/systemd/system/auth-service.service`:
 ```ini
 [Unit]
-Description=Central Auth Microservice (FastAPI RS256)
+Description=Central Auth Microservice (FastAPI HS256)
 After=network.target mysql.service
 
 [Service]
@@ -275,11 +329,8 @@ sudo systemctl status auth-service
 curl -s http://127.0.0.1:8001/health
 # {"status":"ok","service":"auth-service"}
 
-# 3. Kiểm tra JWKS nội bộ
-curl -s http://127.0.0.1:8001/.well-known/jwks.json
-
-# 4. Chạy test suite trực tiếp trên server
-cd /var/www/auth-service && venv/bin/pytest tests/ -v
+# 3. Chạy test suite trực tiếp trên server
+cd /var/www/auth-service && pytest tests/ -v
 ```
 
 ---
@@ -291,9 +342,9 @@ cd /var/www/auth-service && venv/bin/pytest tests/ -v
 ### 2.1. Cấu hình Nginx Reverse Proxy
 Mở file cấu hình Nginx site `english-practice.tma.com.vn` (thường ở `/etc/nginx/sites-available/` hoặc `/etc/nginx/conf.d/`):
 
-Thêm 2 block sau vào bên trong block `server { ... }` (phần SSL / HTTPS):
+Thêm block sau vào bên trong block `server { ... }` (phần SSL / HTTPS):
 ```nginx
-# 1. Điều hướng toàn bộ yêu cầu xác thực sang Auth Service
+# Điều hướng toàn bộ yêu cầu xác thực sang Auth Service
 location /api/auth/ {
     proxy_pass         http://127.0.0.1:8001/api/auth/;
     proxy_set_header   Host              $host;
@@ -302,13 +353,6 @@ location /api/auth/ {
     proxy_set_header   X-Forwarded-Proto $scheme;
     proxy_read_timeout 30s;
     proxy_connect_timeout 5s;
-}
-
-# 2. Expose Public Key JWKS cho các Client & Resource Server
-location /.well-known/jwks.json {
-    proxy_pass         http://127.0.0.1:8001/.well-known/jwks.json;
-    proxy_set_header   Host $host;
-    proxy_cache_valid  200 1h;
 }
 ```
 
@@ -320,14 +364,12 @@ sudo nginx -t && sudo systemctl reload nginx
 ### 2.2. Kiểm tra từ Internet / Trình duyệt bên ngoài
 Truy cập qua HTTPS công khai:
 * `https://english-practice.tma.com.vn/api/auth/health` $\rightarrow$ Thấy `{"status":"ok"}`.
-* `https://english-practice.tma.com.vn/.well-known/jwks.json` $\rightarrow$ Thấy JSON Public Key.
 
 ### 2.3. Cập nhật CareerPath Backend (`careerpath-fastapi`)
-Cập nhật file `.env` của `careerpath-fastapi` trên server:
+Đảm bảo file `.env` của `careerpath-fastapi` trên server có cùng `SECRET_KEY`:
 ```ini
-AUTH_JWKS_URL=http://127.0.0.1:8001/.well-known/jwks.json
-AUTH_JWT_ISSUER=https://english-practice.tma.com.vn/auth
-AUTH_JWT_AUDIENCE=careerpath
+SECRET_KEY=09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7
+ALGORITHM=HS256
 ```
 Khởi động lại Backend CareerPath:
 ```bash
@@ -342,7 +384,7 @@ sudo systemctl restart careerpath-fastapi
    ```
 2. Build và deploy:
    ```bash
-   cd /home/intern-hkloi/Project/Toeic/careerpath-react-ts-vite
+   cd careerpath-react-ts-vite
    npm run build
    # Copy thư mục dist/ sang web root của CareerPath trên server
    ```
@@ -397,14 +439,14 @@ Nếu phát sinh sự cố ở bất kỳ bước nào:
 | Tình huống | Thao tác Rollback | Thời gian |
 | :--- | :--- | :--- |
 | **Sự cố Giai đoạn 1** | `sudo systemctl stop auth-service` — Hệ thống hiện tại không bị ảnh hưởng. | 5 giây |
-| **Sự cố Giai đoạn 2** | Comment 2 block `location` trong file Nginx $\rightarrow$ `sudo systemctl reload nginx`. | 30 giây |
+| **Sự cố Giai đoạn 2** | Comment block `location /api/auth/` trong file Nginx $\rightarrow$ `sudo systemctl reload nginx`. | 30 giây |
 | **Sự cố Giai đoạn 3** | Rollback bản build frontend/backend TOEIC về commit trước đó. | 1 phút |
 
 ---
 
 ## 📊 BẢNG ĐỐI CHIẾU CẤU HÌNH LOCAL VS PRODUCTION
 
-| Thuộc tính | Môi Trường Local (Dev) | Môi Trường Server (Production) |
+| Thuộc tính | Môi Trường Local (Dev - Windows / Linux) | Môi Trường Server (Production - Linux) |
 | :--- | :--- | :--- |
 | **Domain Host** | `localhost` / `127.0.0.1` | `english-practice.tma.com.vn` |
 | **MySQL Host** | `localhost:3306` | `127.0.0.1:3306` |

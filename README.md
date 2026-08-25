@@ -100,13 +100,19 @@ venv/bin/python3 migrate_toeic_users.py --toeic-db toeic
 ## 3. Hướng Dẫn Chạy Service (Run)
 
 ### A. Chạy ở chế độ Development (Auto-reload khi sửa code)
-```bash
-source venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
-```
-* Service sẽ chạy tại: `http://localhost:8001` (hoặc `http://<IP_LAN>:8001`).
+* **Windows (PowerShell)**:
+  ```powershell
+  .\venv\Scripts\Activate.ps1
+  uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+  ```
+* **Linux / macOS**:
+  ```bash
+  source venv/bin/activate
+  uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+  ```
+* Service sẽ chạy tại: `http://localhost:8001` (Swagger UI: `http://localhost:8001/docs`).
 
-### B. Chạy ngầm trong Background
+### B. Chạy ngầm trong Background (Linux Server)
 ```bash
 nohup venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8001 > auth_service.log 2>&1 &
 ```
@@ -118,9 +124,16 @@ nohup venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8001 > auth_service.lo
 ## 4. Kiểm Thử Hệ Thống (Testing)
 
 Chạy bộ test suite tự động với `pytest`:
-```bash
-venv/bin/pytest tests/ -v
-```
+* **Windows (PowerShell)**:
+  ```powershell
+  pytest tests/ -v
+  # hoặc: .\venv\Scripts\pytest.exe tests/ -v
+  ```
+* **Linux / macOS**:
+  ```bash
+  pytest tests/ -v
+  # hoặc: venv/bin/pytest tests/ -v
+  ```
 
 ---
 
@@ -128,11 +141,12 @@ venv/bin/pytest tests/ -v
 
 | Method | Endpoint | Mô tả |
 | :--- | :--- | :--- |
+| `GET` | `/` | Kiểm tra trạng thái và liên kết tài liệu |
 | `GET` | `/health` | Kiểm tra trạng thái hoạt động của Service |
-| `GET` | `/.well-known/jwks.json` | Cung cấp RS256 Public Key (JWKS) cho TOEIC & CareerPath |
+| `GET` | `/.well-known/jwks.json` | Metadata thuật toán JWT (HS256) |
 | `POST` | `/api/auth/register` | Đăng ký tài khoản (hỗ trợ trực tiếp hoặc qua OTP) |
 | `POST` | `/api/auth/register/otp` | Gửi mã OTP xác nhận đăng ký |
-| `POST` | `/api/auth/login` | Đăng nhập (Email/Username) $\rightarrow$ Cấp RS256 Token & HttpOnly Cookie |
+| `POST` | `/api/auth/login` | Đăng nhập (Email/Username) $\rightarrow$ Cấp JWT Token & HttpOnly Cookie |
 | `POST` | `/api/auth/refresh-token`| Cấp lại Access Token mới (hỗ trợ đọc từ HttpOnly Cookie) |
 | `POST` | `/api/auth/logout` | Đăng xuất (thu hồi Refresh Token trong DB + xóa Cookie) |
 | `POST` | `/api/auth/password/otp` | Gửi OTP quên mật khẩu |

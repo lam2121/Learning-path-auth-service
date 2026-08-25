@@ -46,6 +46,16 @@ app.include_router(user_router.router, prefix="/api/auth", tags=["User"])
 app.include_router(jwks_router.router, tags=["JWKS"])
 
 
-@app.get("/health")
+@app.get("/", tags=["Root"])
+async def root():
+    return {
+        "service": "TMA English Practice — Auth Microservice",
+        "status": "running",
+        "docs": "/docs",
+        "health": "/health",
+    }
+
+
+@app.get("/health", tags=["Health"])
 async def health_check():
     return {"status": "ok", "service": "auth-service"}
