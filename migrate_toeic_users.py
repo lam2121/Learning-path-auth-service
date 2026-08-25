@@ -1,12 +1,17 @@
-"""Migration script to copy existing TOEIC users into Central Auth DB (auth_db.users).
+"""Migration script to merge users from TOEIC (Django/FastAPI) and CareerPath (toeic_learningpath)
+into the Central Auth DB (auth_db.users).
 
-Quy tắc role:
-  - 'admin'    : quản trị viên (role == 'admin' hoặc role_id == 2)
-  - 'employee' : mọi giá trị còn lại (student, teacher, learner,…)
+Quy tắc chuẩn hóa:
+  - Role:
+      'admin'    : khi role == 'admin' hoặc role_id == 2 hoặc is_superuser == 1
+      'employee' : mọi giá trị còn lại (student, teacher, learner,…)
+  - Email: Làm sạch whitespace, chuyển về chữ thường.
+  - Tránh trùng lặp (Idempotent): Bỏ qua nếu email hoặc username đã tồn tại trong auth_db.users.
+  - Giữ nguyên mật khẩu đã băm (hỗ trợ cả bcrypt và Django pbkdf2_sha256).
 
 Usage:
     cd auth-service
-    venv/bin/python3 migrate_toeic_users.py --toeic-db toeic_learningpath
+    venv/Scripts/python.exe migrate_toeic_users.py --all
 """
 
 import argparse
@@ -17,12 +22,7 @@ _VALID_ROLES = {"admin", "employee"}
 
 
 def _normalize_role(value) -> str:
-    """Chuẩn hóa role: chỉ 'admin' hoặc 'employee'.
-
-    Args:
-        value: Có thể là string ('admin', 'student', 'teacher', 'learner', …)
-               hoặc int (role_id từ bảng CareerPath: 2 = admin, khác = employee).
-    """
+    """Chuẩn hóa role: chỉ 'admin' hoặc 'employee'."""
     if isinstance(value, int):
         return "admin" if value == 2 else "employee"
     if isinstance(value, str) and value.strip().lower() in _VALID_ROLES:
@@ -30,8 +30,88 @@ def _normalize_role(value) -> str:
     return "employee"
 
 
-def migrate_users(toeic_db_name: str = "toeic"):
-    print(f"=== MIGRATING USERS FROM '{toeic_db_name}' TO 'auth_db' ===")
+def migrate_single_db(cur, source_db_name: str) -> tuple[int, int]:
+    """Migrate users from a specific database into auth_db."""
+    print(f"\n--- Checking source database '{source_db_name}' ---")
+    
+    # Check if DB exists
+    cur.execute("SHOW DATABASES LIKE %s;", (source_db_name,))
+    if not cur.fetchone():
+        print(f"⚠️  Database '{source_db_name}' does not exist on this MySQL server. Skipping.")
+        return 0, 0
+
+    cur.execute(f"USE `{source_db_name}`")
+    cur.execute("SHOW TABLES;")
+    tables = [row[0] for row in cur.fetchall()]
+
+    users_data = []
+    
+    # Case 1: Custom TOEIC App User (Django custom user model)
+    if "toeicapp_user" in tables:
+        print(f"  -> Found 'toeicapp_user' table in '{source_db_name}'")
+        cur.execute("SELECT id, username, email, password, full_name, role, is_active, date_joined FROM `toeicapp_user`")
+        for r in cur.fetchall():
+            uid, uname, email, pwd, fname, role, is_act, created = r
+            if email:
+                users_data.append((uid, uname, email.strip().lower(), pwd, fname, _normalize_role(role), is_act, created))
+
+    # Case 2: Standard Django auth_user
+    elif "auth_user" in tables:
+        print(f"  -> Found 'auth_user' table in '{source_db_name}'")
+        cur.execute("SELECT id, username, email, password, first_name, last_name, is_active, is_superuser, date_joined FROM `auth_user`")
+        for r in cur.fetchall():
+            uid, uname, email, pwd, fname, lname, is_act, is_super, created = r
+            full_name = f"{fname} {lname}".strip() or None
+            role = "admin" if is_super else "employee"
+            if email:
+                users_data.append((uid, uname, email.strip().lower(), pwd, full_name, role, is_act, created))
+
+    # Case 3: CareerPath user table (toeic_learningpath.user)
+    if "user" in tables:
+        print(f"  -> Found 'user' table (CareerPath) in '{source_db_name}'")
+        cur.execute("SELECT id, name, email, hashed_password, role_id, created_at FROM `user`")
+        for r in cur.fetchall():
+            uid, name, email, pwd, role_id, created = r
+            if email:
+                uname = email.split("@")[0]
+                users_data.append((uid, uname, email.strip().lower(), pwd, name, _normalize_role(role_id), 1, created))
+
+    if not users_data:
+        print(f"  -> No user records found in '{source_db_name}'.")
+        return 0, 0
+
+    print(f"  -> Found {len(users_data)} users to process from '{source_db_name}'.")
+
+    # Insert into auth_db.users
+    cur.execute("USE `auth_db`")
+    migrated_count = 0
+    skipped_count = 0
+
+    for user in users_data:
+        uid, uname, email, pwd, fname, role, is_act, created = user
+        
+        # Check duplicate by email or username
+        cur.execute("SELECT id FROM `users` WHERE email = %s OR username = %s", (email, uname))
+        if cur.fetchone():
+            skipped_count += 1
+            continue
+
+        cur.execute(
+            """
+            INSERT INTO `users` (username, email, hashed_password, full_name, role, is_active, is_verified, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, 1, %s)
+            """,
+            (uname, email, pwd or "", fname, role, is_act, created),
+        )
+        migrated_count += 1
+
+    return migrated_count, skipped_count
+
+
+def migrate_all_users(databases: list[str]):
+    print("==================================================================")
+    print("      MERGING USERS INTO CENTRAL AUTH DB (auth_db.users)          ")
+    print("==================================================================")
 
     conn = pymysql.connect(
         host=app_config.MYSQL_HOST,
@@ -42,73 +122,36 @@ def migrate_users(toeic_db_name: str = "toeic"):
     )
 
     try:
+        total_migrated = 0
+        total_skipped = 0
+
         with conn.cursor() as cur:
-            cur.execute(f"USE `{toeic_db_name}`")
-            cur.execute("SHOW TABLES;")
-            tables = [row[0] for row in cur.fetchall()]
-
-            users_data = []
-            if "toeicapp_user" in tables:
-                print("Detected 'toeicapp_user' table (TOEIC Web)...")
-                cur.execute("SELECT id, username, email, password, full_name, role, is_active, date_joined FROM `toeicapp_user`")
-                for r in cur.fetchall():
-                    uid, uname, email, pwd, fname, role, is_act, created = r
-                    # toeicapp_user.role: 'admin' | 'student' | 'teacher' → chuẩn hóa
-                    users_data.append((uid, uname, email, pwd, fname, _normalize_role(role), is_act, created))
-            elif "user" in tables:
-                print("Detected 'user' table (CareerPath / LearningPath)...")
-                cur.execute("SELECT id, name, email, hashed_password, role_id, created_at FROM `user`")
-                for r in cur.fetchall():
-                    uid, name, email, pwd, role_id, created = r
-                    # role_id: 2 = admin, 1 (hoặc khác) = employee
-                    uname = email.split("@")[0] if email else f"user_{uid}"
-                    users_data.append((uid, uname, email, pwd, name, _normalize_role(role_id), 1, created))
-            elif "auth_user" in tables:
-                print("Detected 'auth_user' table (Django default)...")
-                cur.execute("SELECT id, username, email, password, first_name, last_name, is_active, date_joined FROM `auth_user`")
-                for r in cur.fetchall():
-                    uid, uname, email, pwd, fname, lname, is_act, created = r
-                    full_name = f"{fname} {lname}".strip() or None
-                    # Django auth_user không có role → mặc định employee
-                    users_data.append((uid, uname, email, pwd, full_name, "employee", is_act, created))
-            else:
-                print(f"❌ No recognized user table found in '{toeic_db_name}'. Available tables: {tables}")
-                return
-
-            print(f"Found {len(users_data)} users in source DB '{toeic_db_name}'.")
-
-            # Insert into auth_db.users
-            cur.execute("USE `auth_db`")
-            migrated_count = 0
-            skipped_count = 0
-
-            for user in users_data:
-                uid, uname, email, pwd, fname, role, is_act, created = user
-                
-                # Check duplicate by email or username
-                cur.execute("SELECT id FROM `users` WHERE email = %s OR username = %s", (email, uname))
-                if cur.fetchone():
-                    skipped_count += 1
-                    continue
-
-                cur.execute(
-                    """
-                    INSERT INTO `users` (username, email, hashed_password, full_name, role, is_active, is_verified, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, 1, %s)
-                    """,
-                    (uname, email, pwd or "", fname, role, is_act, created),
-                )
-                migrated_count += 1
-
+            for db_name in databases:
+                migrated, skipped = migrate_single_db(cur, db_name)
+                total_migrated += migrated
+                total_skipped += skipped
+            
             conn.commit()
-            print(f"✅ Migration completed: {migrated_count} users migrated, {skipped_count} users skipped (already existed).")
+
+        print("\n==================================================================")
+        print(f"✅ MIGRATION COMPLETED SUCCESSFULLY!")
+        print(f"   • Total new users merged: {total_migrated}")
+        print(f"   • Total skipped (already existed): {total_skipped}")
+        print("==================================================================")
 
     finally:
         conn.close()
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--toeic-db", default="toeic", help="Source database name ('toeic' or 'toeic_learningpath')")
+    parser = argparse.ArgumentParser(description="Merge TOEIC & CareerPath users into auth_db")
+    parser.add_argument("--all", action="store_true", default=True, help="Migrate from both 'toeic' and 'toeic_learningpath'")
+    parser.add_argument("--db", type=str, help="Specific DB to migrate from (e.g. 'toeic' or 'toeic_learningpath')")
     args = parser.parse_args()
-    migrate_users(args.toeic_db)
+
+    if args.db:
+        target_dbs = [args.db]
+    else:
+        target_dbs = ["toeic", "toeic_learningpath"]
+
+    migrate_all_users(target_dbs)

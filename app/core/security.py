@@ -12,9 +12,10 @@ from passlib.context import CryptContext
 
 from app.core.config import app_config
 
-# ── Bcrypt ────────────────────────────────────────────────────────────────────
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(
+    schemes=["bcrypt", "pbkdf2_sha256", "django_pbkdf2_sha256", "django_argon2"],
+    deprecated="auto",
+)
 
 
 def hash_password(password: str) -> str:
