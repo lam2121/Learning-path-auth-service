@@ -177,3 +177,12 @@ def test_password_reset_flow():
     # New password should succeed
     success_login = client.post("/api/auth/login", json={"credential": username, "password": new_password})
     assert success_login.status_code == 200
+
+    # Test form-urlencoded login (supports traditional HTML forms & legacy React apps)
+    form_login = client.post(
+        "/api/auth/login",
+        data={"username": username, "password": new_password},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert form_login.status_code == 200
+    assert "access_token" in form_login.json()

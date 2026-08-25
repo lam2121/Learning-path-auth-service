@@ -163,8 +163,69 @@ async def register(req: RegisterRequest, response: Response, db: Session = Depen
 # ── Login ─────────────────────────────────────────────────────────────────────
 
 @router.post("/login", response_model=LoginResponse)
-async def login(req: LoginRequest, response: Response, request: Request, db: Session = Depends(get_db)):
-    user = authenticate_user(db, req.credential, req.password)
+async def login(request: Request, response: Response, db: Session = Depends(get_db)):
+    credential = None
+    password = None
+
+    content_type = request.headers.get("content-type", "").lower()
+
+    if "application/json" in content_type:
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                credential = (
+                    body.get("credential")
+                    or body.get("username")
+                    or body.get("email")
+                    or body.get("identifier")
+                )
+                password = body.get("password")
+        except Exception:
+            pass
+    elif "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
+        try:
+            form = await request.form()
+            credential = (
+                form.get("credential")
+                or form.get("username")
+                or form.get("email")
+                or form.get("identifier")
+            )
+            password = form.get("password")
+        except Exception:
+            pass
+    else:
+        # Fallback: try reading JSON first, then Form
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                credential = (
+                    body.get("credential")
+                    or body.get("username")
+                    or body.get("email")
+                    or body.get("identifier")
+                )
+                password = body.get("password")
+        except Exception:
+            try:
+                form = await request.form()
+                credential = (
+                    form.get("credential")
+                    or form.get("username")
+                    or form.get("email")
+                    or form.get("identifier")
+                )
+                password = form.get("password")
+            except Exception:
+                pass
+
+    if not credential or not password:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Vui lòng cung cấp đầy đủ tên đăng nhập (username/email) và mật khẩu.",
+        )
+
+    user = authenticate_user(db, str(credential).strip(), str(password))
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
