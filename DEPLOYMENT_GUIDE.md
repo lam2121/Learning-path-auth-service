@@ -281,13 +281,28 @@ alembic upgrade head
 ```
 
 ### 1.5. Đồng bộ dữ liệu User từ TOEIC & CareerPath sang `auth_db`
-Chạy script migration để chuyển toàn bộ user hiện tại vào Central Auth DB (mật khẩu Bcrypt được giữ nguyên 100%):
-```bash
-# Migrate từ database TOEIC
-python3 migrate_toeic_users.py --toeic-db toeic
+Chạy script migration để gộp toàn bộ user từ cả 2 database vào Central Auth DB (mật khẩu Bcrypt và Django PBKDF2 được giữ nguyên 100%):
 
-# Migrate từ database CareerPath (nếu có)
-python3 migrate_toeic_users.py --toeic-db toeic_learningpath
+#### 👉 Trên Windows (PowerShell):
+```powershell
+cd C:\auth-service-toeic\auth-service
+# Gộp cùng lúc cả 2 database (toeic & toeic_learningpath)
+.\venv\Scripts\python.exe migrate_toeic_users.py --all
+
+# Hoặc gộp từng database riêng lẻ nếu muốn:
+.\venv\Scripts\python.exe migrate_toeic_users.py --db toeic
+.\venv\Scripts\python.exe migrate_toeic_users.py --db toeic_learningpath
+```
+
+#### 👉 Trên Linux (Bash):
+```bash
+cd /var/www/auth-service
+# Gộp cùng lúc cả 2 database (toeic & toeic_learningpath)
+venv/bin/python3 migrate_toeic_users.py --all
+
+# Hoặc gộp từng database riêng lẻ nếu muốn:
+venv/bin/python3 migrate_toeic_users.py --db toeic
+venv/bin/python3 migrate_toeic_users.py --db toeic_learningpath
 ```
 
 ### 1.6. Cấu hình Systemd Daemon Service
