@@ -84,7 +84,7 @@ def test_registration_and_login_flow():
     access_token = login_data["access_token"]
     refresh_token = login_data["refresh_token"]
 
-    # 4. Access /me
+    # 4. Access /me (GET & PATCH)
     me_res = client.get(
         "/api/auth/me",
         headers={"Authorization": f"Bearer {access_token}"},
@@ -92,6 +92,18 @@ def test_registration_and_login_flow():
     assert me_res.status_code == 200
     assert me_res.json()["id"] == user_id
     assert me_res.json()["email"] == email
+    assert me_res.json()["role_id"] == 1
+    assert me_res.json()["name"] is not None
+
+    patch_res = client.patch(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {access_token}"},
+        json={"full_name": "Updated Name", "phone": "0901234567"},
+    )
+    assert patch_res.status_code == 200
+    assert patch_res.json()["full_name"] == "Updated Name"
+    assert patch_res.json()["name"] == "Updated Name"
+    assert patch_res.json()["phone"] == "0901234567"
 
     # 5. Access /verify-token
     verify_res = client.get(

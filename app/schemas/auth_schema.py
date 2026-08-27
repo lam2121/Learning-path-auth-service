@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, model_validator
 
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
@@ -182,11 +182,23 @@ class UserResponse(BaseModel):
     username: Optional[str] = None
     email: str
     full_name: Optional[str] = None
+    name: Optional[str] = None
     phone: Optional[str] = None
     role: str = "employee"
+    role_id: int = 1
     is_active: bool = True
     is_verified: bool = False
+    avatar_url: Optional[str] = None
     created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    @model_validator(mode="after")
+    def populate_computed_fields(self) -> "UserResponse":
+        if not self.name:
+            self.name = self.full_name or self.username or (self.email.split("@")[0] if self.email else "")
+        if self.role:
+            self.role_id = 2 if str(self.role).strip().lower() in ("admin", "administrator") else 1
+        return self
 
     class Config:
         from_attributes = True
