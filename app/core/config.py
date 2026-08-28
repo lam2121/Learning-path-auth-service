@@ -46,7 +46,7 @@ class AppConfig(BaseSettings):
     EMAIL_USERNAME: str = ""
     EMAIL_PASSWORD: str = ""
     EMAIL_SMTP_SERVER: str = ""
-    EMAIL_SMTP_PORT: int = 587
+    EMAIL_SMTP_PORT: int = 465
 
     # ── Cookie (SSO) ─────────────────────────────────────────────────────
     COOKIE_DOMAIN: str = "localhost"
