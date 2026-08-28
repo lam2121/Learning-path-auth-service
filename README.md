@@ -76,14 +76,9 @@ COOKIE_SAMESITE=lax
 ### Bước 6: Khởi tạo Database & Chạy Alembic Migration
 ```bash
 # Tạo database auth_db (nếu chưa có)
-python3 -c "
-import pymysql, os
-conn = pymysql.connect(host='localhost', user='root', password='your_mysql_password', port=3306)
-with conn.cursor() as cur:
-    cur.execute('CREATE DATABASE IF NOT EXISTS auth_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci')
-conn.close()
-print('Database auth_db ready!')
-"
+CREATE DATABASE IF NOT EXISTS auth_db
+CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
 
 # Chạy Alembic migration
 alembic upgrade head
@@ -93,7 +88,9 @@ alembic upgrade head
 Nếu bạn muốn chuyển toàn bộ User hiện có từ Database TOEIC sang Auth Service:
 ```bash
 venv/bin/python3 migrate_toeic_users.py --toeic-db toeic
+
 ```
+venv/bin/python migrate_toeic_users.py --toeic-db toeic
 
 ---
 
