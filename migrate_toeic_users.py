@@ -30,7 +30,7 @@ def _normalize_role(value) -> str:
     return "employee"
 
 
-def migrate_single_db(cur, source_db_name: str) -> tuple[int, int]:
+def migrate_single_db(cur, source_db_name: str) -> tuple[int, int, int]:
     """Migrate users from a specific database into auth_db."""
     print(f"\n--- Checking source database '{source_db_name}' ---")
     
@@ -38,7 +38,7 @@ def migrate_single_db(cur, source_db_name: str) -> tuple[int, int]:
     cur.execute("SHOW DATABASES LIKE %s;", (source_db_name,))
     if not cur.fetchone():
         print(f"⚠️  Database '{source_db_name}' does not exist on this MySQL server. Skipping.")
-        return 0, 0
+        return 0, 0, 0
 
     cur.execute(f"USE `{source_db_name}`")
     cur.execute("SHOW TABLES;")
@@ -78,22 +78,63 @@ def migrate_single_db(cur, source_db_name: str) -> tuple[int, int]:
 
     if not users_data:
         print(f"  -> No user records found in '{source_db_name}'.")
-        return 0, 0
+        return 0, 0, 0
 
     print(f"  -> Found {len(users_data)} users to process from '{source_db_name}'.")
 
-    # Insert into auth_db.users
+    # Insert / Update into auth_db.users
     cur.execute("USE `auth_db`")
     migrated_count = 0
+    updated_count = 0
     skipped_count = 0
 
     for user in users_data:
         uid, uname, email, pwd, fname, role, is_act, created = user
         
-        # Check duplicate by email or username
-        cur.execute("SELECT id FROM `users` WHERE email = %s OR username = %s", (email, uname))
-        if cur.fetchone():
-            skipped_count += 1
+        # Check existing user by email or username
+        cur.execute(
+            "SELECT id, hashed_password, full_name, role, is_active FROM `users` WHERE email = %s OR username = %s",
+            (email, uname),
+        )
+        existing = cur.fetchone()
+        
+        if existing:
+            existing_id, existing_pwd, existing_fname, existing_role, existing_act = existing
+            
+            # Check if any field has changed (especially password)
+            needs_update = False
+            update_fields = []
+            update_values = []
+            
+            if pwd and pwd != existing_pwd:
+                update_fields.append("hashed_password = %s")
+                update_values.append(pwd)
+                needs_update = True
+                
+            if fname and fname != existing_fname:
+                update_fields.append("full_name = %s")
+                update_values.append(fname)
+                needs_update = True
+                
+            if role and role != existing_role:
+                update_fields.append("role = %s")
+                update_values.append(role)
+                needs_update = True
+                
+            if is_act is not None and int(bool(is_act)) != int(bool(existing_act)):
+                update_fields.append("is_active = %s")
+                update_values.append(is_act)
+                needs_update = True
+
+            if needs_update:
+                update_values.append(existing_id)
+                cur.execute(
+                    f"UPDATE `users` SET {', '.join(update_fields)} WHERE id = %s",
+                    tuple(update_values),
+                )
+                updated_count += 1
+            else:
+                skipped_count += 1
             continue
 
         cur.execute(
@@ -105,7 +146,7 @@ def migrate_single_db(cur, source_db_name: str) -> tuple[int, int]:
         )
         migrated_count += 1
 
-    return migrated_count, skipped_count
+    return migrated_count, updated_count, skipped_count
 
 
 def migrate_all_users(databases: list[str]):
@@ -123,20 +164,23 @@ def migrate_all_users(databases: list[str]):
 
     try:
         total_migrated = 0
+        total_updated = 0
         total_skipped = 0
 
         with conn.cursor() as cur:
             for db_name in databases:
-                migrated, skipped = migrate_single_db(cur, db_name)
+                migrated, updated, skipped = migrate_single_db(cur, db_name)
                 total_migrated += migrated
+                total_updated += updated
                 total_skipped += skipped
             
             conn.commit()
 
         print("\n==================================================================")
         print(f"✅ MIGRATION COMPLETED SUCCESSFULLY!")
-        print(f"   • Total new users merged: {total_migrated}")
-        print(f"   • Total skipped (already existed): {total_skipped}")
+        print(f"   • Total new users merged:   {total_migrated}")
+        print(f"   • Total users updated (pwd/info): {total_updated}")
+        print(f"   • Total users unchanged (skipped): {total_skipped}")
         print("==================================================================")
 
     finally:
@@ -146,7 +190,7 @@ def migrate_all_users(databases: list[str]):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Merge TOEIC & CareerPath users into auth_db")
     parser.add_argument("--all", action="store_true", default=True, help="Migrate from both 'toeic' and 'toeic_learningpath'")
-    parser.add_argument("--db", type=str, help="Specific DB to migrate from (e.g. 'toeic' or 'toeic_learningpath')")
+    parser.add_argument("--db", "--toeic-db", type=str, dest="db", help="Specific DB to migrate from (e.g. 'toeic' or 'toeic_learningpath')")
     args = parser.parse_args()
 
     if args.db:

@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import logging
+import aiosmtplib
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.core.config import app_config
 from app.core.database import get_db
@@ -378,9 +383,17 @@ async def request_password_otp(req: PasswordOtpRequest, db: Session = Depends(ge
     try:
         msg = build_password_reset_email(user.email, otp, str(app_config.OTP_EXPIRES_MINUTES))
         await send_email_async(msg)
-    except Exception:
+    except aiosmtplib.errors.SMTPAuthenticationError:
         clear_stored_otp(user.email)
-        raise HTTPException(status_code=500, detail="Không thể gửi email OTP.")
+        logger.error(f"SMTP Auth Error (535): Failed to authenticate with {app_config.EMAIL_SMTP_SERVER} using username {app_config.EMAIL_USERNAME}")
+        raise HTTPException(
+            status_code=500,
+            detail="Lỗi xác thực máy chủ gửi mail SMTP (535 Authentication Unsuccessful). Vui lòng kiểm tra lại EMAIL_USERNAME / EMAIL_PASSWORD trong .env.",
+        )
+    except Exception as exc:
+        clear_stored_otp(user.email)
+        logger.error(f"SMTP error sending OTP to {user.email}: {exc}")
+        raise HTTPException(status_code=500, detail=f"Không thể gửi email OTP: {str(exc)}")
 
     return OtpResponse(
         success=True,
@@ -418,6 +431,7 @@ async def verify_password_otp(req: PasswordOtpVerifyRequest, db: Session = Depen
 # ── Password Reset ────────────────────────────────────────────────────────────
 
 @router.put("/password/reset", response_model=PasswordResetResponse)
+@router.post("/password/reset", response_model=PasswordResetResponse)
 async def reset_password(req: PasswordResetRequest, db: Session = Depends(get_db)):
     payload = verify_otp_purpose_token(req.token)
     if not payload or payload.get("purpose") != "reset_password":
