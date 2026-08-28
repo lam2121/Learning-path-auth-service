@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -13,8 +13,24 @@ from app.models.user import User
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 
+def get_token_from_request(
+    request: Request,
+    token: str | None = Depends(oauth2_scheme),
+) -> str | None:
+    """Accept bearer auth first, then fall back to the HttpOnly access-token cookie."""
+    if token:
+        return token
+
+    cookie_token = request.cookies.get("access_token")
+    if cookie_token:
+        return cookie_token
+
+    return None
+
+
 def get_current_user(
-    token: str | None = Depends(oauth2_scheme), db: Session = Depends(get_db)
+    token: str | None = Depends(get_token_from_request),
+    db: Session = Depends(get_db),
 ) -> User:
     """Dependency: decode JWT and return the authenticated User."""
     if token is None:

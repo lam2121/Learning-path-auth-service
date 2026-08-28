@@ -24,7 +24,8 @@ def test_cross_app_hs256_verification():
 
     login_res = client.post("/api/auth/login", json={"credential": "crossappuser", "password": "Password123!"})
     assert login_res.status_code == 200
-    access_token = login_res.json()["access_token"]
+    access_token = login_res.cookies.get("access_token")
+    assert access_token is not None
 
     # 2. CareerPath / TOEIC decodes JWT using the shared SECRET_KEY with HS256
     decoded = jwt.decode(
@@ -42,4 +43,3 @@ def test_cross_app_hs256_verification():
     assert "toeic" in decoded["aud"]
     assert "careerpath" in decoded["aud"]
     assert decoded["iss"] == "https://english-practice.tma.com.vn/auth"
-

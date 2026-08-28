@@ -48,6 +48,7 @@ from app.services.otp_service import (
 from app.services.token_service import (
     issue_tokens,
     refresh_access_token,
+    revoke_all_user_tokens,
     revoke_refresh_token,
 )
 from app.core.security import hash_password
@@ -55,6 +56,7 @@ from app.core.security import hash_password
 router = APIRouter()
 
 REFRESH_COOKIE_NAME = "auth_refresh_token"
+ACCESS_COOKIE_NAME = "access_token"
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -71,10 +73,36 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
     )
 
 
+def _set_access_cookie(response: Response, access_token: str) -> None:
+    """Set the HttpOnly access-token cookie on the response."""
+    response.set_cookie(
+        key=ACCESS_COOKIE_NAME,
+        value=access_token,
+        max_age=app_config.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,
+        secure=app_config.COOKIE_SECURE,
+        samesite=app_config.COOKIE_SAMESITE,
+        domain=app_config.COOKIE_DOMAIN if app_config.COOKIE_DOMAIN != "localhost" else None,
+        path="/",
+    )
+
+
 def _clear_refresh_cookie(response: Response) -> None:
     """Delete the refresh-token cookie."""
     response.delete_cookie(
         key=REFRESH_COOKIE_NAME,
+        httponly=True,
+        secure=app_config.COOKIE_SECURE,
+        samesite=app_config.COOKIE_SAMESITE,
+        domain=app_config.COOKIE_DOMAIN if app_config.COOKIE_DOMAIN != "localhost" else None,
+        path="/",
+    )
+
+
+def _clear_access_cookie(response: Response) -> None:
+    """Delete the access-token cookie."""
+    response.delete_cookie(
+        key=ACCESS_COOKIE_NAME,
         httponly=True,
         secure=app_config.COOKIE_SECURE,
         samesite=app_config.COOKIE_SAMESITE,
@@ -156,8 +184,12 @@ async def register(request: Request, response: Response, db: Session = Depends(g
     full_name = str(data.get("full_name") or data.get("name") or data.get("fullName") or "").strip()
     otp = str(data.get("otp") or "").strip() or None
     role = str(data.get("role") or "employee").strip().lower()
-    if role not in ("admin", "employee"):
-        role = "employee"
+    if role == "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Self-registration cannot assign admin privileges.",
+        )
+    role = "employee"
 
     if not email or "@" not in email:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Vui lòng cung cấp email hợp lệ.")
@@ -198,10 +230,6 @@ async def register(request: Request, response: Response, db: Session = Depends(g
         full_name=full_name if full_name else None,
         role=role,
     )
-
-    # Issue tokens
-    tokens = issue_tokens(user, db)
-    _set_refresh_cookie(response, tokens["refresh_token"])
 
     user_resp = UserResponse.model_validate(user)
     return RegisterResponse(message="Đăng ký thành công!", user=user_resp)
@@ -282,12 +310,12 @@ async def login(request: Request, response: Response, db: Session = Depends(get_
     device_info = request.headers.get("User-Agent", "unknown")
     tokens = issue_tokens(user, db, device_info=device_info)
     _set_refresh_cookie(response, tokens["refresh_token"])
+    _set_access_cookie(response, tokens["access_token"])
 
     user_resp = UserResponse.model_validate(user)
     return LoginResponse(
-        access_token=tokens["access_token"],
-        refresh_token=tokens["refresh_token"],
         user=user_resp,
+        message="Login successful",
     )
 
 
@@ -314,10 +342,12 @@ async def refresh_token(request: Request, response: Response, db: Session = Depe
     result = refresh_access_token(raw_token, db)
     if result is None:
         _clear_refresh_cookie(response)
+        _clear_access_cookie(response)
         raise HTTPException(status_code=401, detail="Refresh token không hợp lệ hoặc đã bị thu hồi.")
 
     _set_refresh_cookie(response, result["refresh_token"])
-    return result
+    _set_access_cookie(response, result["access_token"])
+    return {"success": True, "message": "Access token refreshed."}
 
 
 # ── Logout ────────────────────────────────────────────────────────────────────
@@ -328,6 +358,7 @@ async def logout(request: Request, response: Response, db: Session = Depends(get
     if raw_token:
         revoke_refresh_token(raw_token, db)
     _clear_refresh_cookie(response)
+    _clear_access_cookie(response)
     return {"success": True, "message": "Đăng xuất thành công."}
 
 
@@ -398,6 +429,7 @@ async def reset_password(req: PasswordResetRequest, db: Session = Depends(get_db
 
     user.hashed_password = hash_password(req.new_password)
     db.commit()
+    revoke_all_user_tokens(user.id, db)
 
     return PasswordResetResponse(message="Mật khẩu đã được đặt lại thành công.")
 
@@ -411,10 +443,10 @@ async def guest_login(req: GuestLoginRequest, response: Response, request: Reque
     device_info = request.headers.get("User-Agent", "unknown")
     tokens = issue_tokens(user, db, device_info=device_info)
     _set_refresh_cookie(response, tokens["refresh_token"])
+    _set_access_cookie(response, tokens["access_token"])
 
     user_resp = UserResponse.model_validate(user)
     return LoginResponse(
-        access_token=tokens["access_token"],
-        refresh_token=tokens["refresh_token"],
         user=user_resp,
+        message="Guest login successful",
     )

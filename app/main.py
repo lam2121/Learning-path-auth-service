@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import Base, engine
-from app.routers import auth_router, jwks_router, user_router
+from app.routers import auth_router, user_router
 
 
 @asynccontextmanager
@@ -43,7 +43,6 @@ app.add_middleware(
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(auth_router.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(user_router.router, prefix="/api/auth", tags=["User"])
-app.include_router(jwks_router.router, tags=["JWKS"])
 
 
 @app.get("/", tags=["Root"])

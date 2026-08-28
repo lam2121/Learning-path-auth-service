@@ -25,16 +25,6 @@ def clean_db():
         db.close()
     yield
 
-
-def test_jwks_endpoint():
-    """Verify endpoint returns HS256 algorithm metadata."""
-    res = client.get("/.well-known/jwks.json")
-    assert res.status_code == 200
-    data = res.json()
-    assert data["algorithm"] == "HS256"
-    assert "keys" in data
-
-
 def test_guest_login_flow():
     """Test guest login endpoint."""
     res = client.post(
@@ -43,8 +33,8 @@ def test_guest_login_flow():
     )
     assert res.status_code == 200
     data = res.json()
-    assert "access_token" in data
-    assert "refresh_token" in data
+    assert res.cookies.get("access_token") is not None
+    assert res.cookies.get("auth_refresh_token") is not None
     assert data["user"]["email"] == "guest_test@example.com"
     assert data["user"]["role"] == "guest"
 
@@ -72,6 +62,8 @@ def test_registration_and_login_flow():
     assert reg_res.status_code == 201
     reg_data = reg_res.json()
     assert reg_data["user"]["email"] == email
+    assert reg_res.cookies.get("access_token") is None
+    assert reg_res.cookies.get("auth_refresh_token") is None
     user_id = reg_data["user"]["id"]
 
     # 3. Login
@@ -81,8 +73,11 @@ def test_registration_and_login_flow():
     )
     assert login_res.status_code == 200
     login_data = login_res.json()
-    access_token = login_data["access_token"]
-    refresh_token = login_data["refresh_token"]
+    access_token = login_res.cookies.get("access_token")
+    refresh_token = login_res.cookies.get("auth_refresh_token")
+    assert access_token is not None
+    assert refresh_token is not None
+    assert login_data["user"]["email"] == email
 
     # 4. Access /me (GET & PATCH)
     me_res = client.get(
@@ -95,6 +90,13 @@ def test_registration_and_login_flow():
     assert me_res.json()["role_id"] == 1
     assert me_res.json()["name"] is not None
 
+    cookie_me_res = client.get(
+        "/api/auth/me",
+        cookies={"access_token": access_token},
+    )
+    assert cookie_me_res.status_code == 200
+    assert cookie_me_res.json()["id"] == user_id
+
     patch_res = client.patch(
         "/api/auth/me",
         headers={"Authorization": f"Bearer {access_token}"},
@@ -104,6 +106,14 @@ def test_registration_and_login_flow():
     assert patch_res.json()["full_name"] == "Updated Name"
     assert patch_res.json()["name"] == "Updated Name"
     assert patch_res.json()["phone"] == "0901234567"
+
+    cookie_patch_res = client.patch(
+        "/api/auth/me",
+        cookies={"access_token": access_token},
+        json={"full_name": "Cookie Updated Name"},
+    )
+    assert cookie_patch_res.status_code == 200
+    assert cookie_patch_res.json()["full_name"] == "Cookie Updated Name"
 
     # 5. Access /verify-token
     verify_res = client.get(
@@ -120,7 +130,8 @@ def test_registration_and_login_flow():
         json={"refresh_token": refresh_token},
     )
     assert ref_res.status_code == 200
-    new_refresh_token = ref_res.json()["refresh_token"]
+    new_refresh_token = ref_res.cookies.get("auth_refresh_token")
+    assert new_refresh_token is not None
     assert new_refresh_token != refresh_token
 
     # 7. Old refresh token should now be invalid (rotation)
@@ -197,4 +208,4 @@ def test_password_reset_flow():
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     assert form_login.status_code == 200
-    assert "access_token" in form_login.json()
+    assert form_login.cookies.get("access_token") is not None

@@ -108,15 +108,14 @@ pytest tests/ -v
 # Hoặc chạy trực tiếp: venv/bin/pytest tests/ -v
 ```
 
-**Kết quả yêu cầu đạt 100% (6/6 pass):**
+**Kết quả yêu cầu đạt 100% (5/5 pass):**
 ```
-tests/test_auth_endpoints.py::test_jwks_endpoint PASSED                  [ 16%]
-tests/test_auth_endpoints.py::test_guest_login_flow PASSED               [ 33%]
-tests/test_auth_endpoints.py::test_registration_and_login_flow PASSED    [ 50%]
-tests/test_auth_endpoints.py::test_password_reset_flow PASSED            [ 66%]
-tests/test_cross_app_jwt.py::test_cross_app_hs256_verification PASSED    [ 83%]
+tests/test_auth_endpoints.py::test_guest_login_flow PASSED               [ 20%]
+tests/test_auth_endpoints.py::test_registration_and_login_flow PASSED    [ 40%]
+tests/test_auth_endpoints.py::test_password_reset_flow PASSED            [ 60%]
+tests/test_cross_app_jwt.py::test_cross_app_hs256_verification PASSED    [ 80%]
 tests/test_otp_rate_limit.py::test_otp_rate_limit_exceeded PASSED        [100%]
-======================== 6 passed in Xs ========================
+======================== 5 passed in Xs ========================
 ```
 
 ---

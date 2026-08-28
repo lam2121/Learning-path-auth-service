@@ -140,7 +140,6 @@ Chạy bộ test suite tự động với `pytest`:
 | :--- | :--- | :--- |
 | `GET` | `/` | Kiểm tra trạng thái và liên kết tài liệu |
 | `GET` | `/health` | Kiểm tra trạng thái hoạt động của Service |
-| `GET` | `/.well-known/jwks.json` | Metadata thuật toán JWT (HS256) |
 | `POST` | `/api/auth/register` | Đăng ký tài khoản (hỗ trợ trực tiếp hoặc qua OTP) |
 | `POST` | `/api/auth/register/otp` | Gửi mã OTP xác nhận đăng ký |
 | `POST` | `/api/auth/login` | Đăng nhập (Email/Username) $\rightarrow$ Cấp JWT Token & HttpOnly Cookie |
