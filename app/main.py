@@ -32,7 +32,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:3000",
-        "https://english-practice.tma.com.vn",
+        "https://builtbylam.com",
+        "https://www.builtbylam.com",
     ],
     allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|english-practice\.tma\.com\.vn)(:\d+)?",
     allow_credentials=True,
