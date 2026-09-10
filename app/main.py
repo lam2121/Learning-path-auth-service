@@ -1,4 +1,4 @@
-"""Auth Microservice — Central Identity Provider & SSO for TMA English Practice."""
+"""Auth Microservice — Central Identity Provider & SSO for CareerPath Platform."""
 
 from contextlib import asynccontextmanager
 import os
@@ -6,22 +6,41 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import app_config
 from app.core.database import Base, engine
 from app.routers import auth_router, user_router
+
+INSECURE_EXAMPLE_SECRET = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
+
+
+def _validate_jwt_secret() -> None:
+    secret = getattr(app_config, "JWT_SECRET_KEY", "")
+    if secret == INSECURE_EXAMPLE_SECRET:
+        if os.getenv("APP_ENV", "development").lower() == "production":
+            raise RuntimeError(
+                "CRITICAL SECURITY CONFIGURATION ERROR: Server refused to boot because JWT_SECRET_KEY "
+                "matches the hardcoded insecure example key in production. Generate a strong key with: "
+                "python -c 'import secrets; print(secrets.token_hex(32))' and set it in your .env file."
+            )
+        import logging
+        logging.getLogger("uvicorn.error").warning(
+            "SECURITY WARNING: JWT_SECRET_KEY is using the hardcoded default key from .env.example! "
+            "Change this immediately before deploying to production."
+        )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Create all tables on startup (development only).
-    In production, use Alembic migrations instead."""
+    """Validate configuration and initialize tables on startup."""
+    _validate_jwt_secret()
     if os.getenv("APP_ENV", "development").lower() != "production":
         Base.metadata.create_all(bind=engine)
     yield
 
 
 app = FastAPI(
-    title="TMA English Practice — Auth Service",
-    description="Central Identity Provider & SSO Service for TOEIC and CareerPath applications.",
+    title="CareerPath — Auth Service",
+    description="Central Identity Provider & SSO Service for CareerPath applications.",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -35,7 +54,7 @@ app.add_middleware(
         "https://builtbylam.com",
         "https://www.builtbylam.com",
     ],
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|english-practice\.tma\.com\.vn)(:\d+)?",
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,7 +68,7 @@ app.include_router(user_router.router, prefix="/api/auth", tags=["User"])
 @app.get("/", tags=["Root"])
 async def root():
     return {
-        "service": "TMA English Practice — Auth Microservice",
+        "service": "CareerPath — Auth Microservice",
         "status": "running",
         "docs": "/docs",
         "health": "/health",

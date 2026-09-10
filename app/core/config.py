@@ -19,7 +19,7 @@ class AppConfig(BaseSettings):
 
     # Connection pool
     DB_POOL_MIN_SIZE: int = 5
-    DB_POOL_MAX_SIZE: int = 20
+    DB_POOL_MAX_SIZE: int = 10
     DB_CONNECT_TIMEOUT: int = 10
     DB_POOL_RECYCLE: int = 3600
     DB_READ_TIMEOUT: int = 20
@@ -53,6 +53,9 @@ class AppConfig(BaseSettings):
     COOKIE_DOMAIN: str = ".builtbylam.com"
     COOKIE_SECURE: bool = False
     COOKIE_SAMESITE: str = "lax"
+
+    # ── Redis ─────────────────────────────────────────────────────────────
+    REDIS_URL: str = ""
 
     class Config:
         env_file = str(Path(__file__).resolve().parents[2] / ".env")

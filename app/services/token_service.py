@@ -64,6 +64,7 @@ def refresh_access_token(raw_refresh_token: str, db: Session) -> dict | None:
     stored = (
         db.query(RefreshToken)
         .filter(RefreshToken.token_hash == token_hash, RefreshToken.revoked == False)
+        .with_for_update()
         .first()
     )
     if stored is None:
@@ -88,6 +89,7 @@ def revoke_refresh_token(raw_refresh_token: str, db: Session) -> bool:
     stored = (
         db.query(RefreshToken)
         .filter(RefreshToken.token_hash == token_hash, RefreshToken.revoked == False)
+        .with_for_update()
         .first()
     )
     if stored is None:

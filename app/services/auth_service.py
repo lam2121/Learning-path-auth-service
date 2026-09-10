@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, verify_password
@@ -19,6 +20,11 @@ def authenticate_user(db: Session, credential: str, password: str) -> User | Non
         return None
     if not verify_password(password, user.hashed_password):
         return None
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên.",
+        )
     return user
 
 
@@ -74,8 +80,19 @@ def upsert_guest_user(
     db: Session, *, email: str, name: str | None = None, phone: str | None = None
 ) -> User:
     """Find or create a guest user account."""
-    user = db.query(User).filter(User.email == email).first()
+    clean_email = email.strip().lower()
+    user = db.query(User).filter(User.email == clean_email).first()
     if user:
+        if user.role != "guest":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email đã được đăng ký tài khoản chính thức. Vui lòng đăng nhập bằng mật khẩu.",
+            )
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên.",
+            )
         return user
 
     user = User(

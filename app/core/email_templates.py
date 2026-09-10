@@ -8,35 +8,35 @@ from app.core.config import app_config
 
 # ── Subjects ──────────────────────────────────────────────────────────────────
 
-REGISTER_OTP_SUBJECT = "TMA English Practice — Mã xác nhận đăng ký"
-PASSWORD_RESET_SUBJECT = "TMA English Practice — Đặt lại mật khẩu"
+REGISTER_OTP_SUBJECT = "CareerPath — Mã xác nhận đăng ký"
+PASSWORD_RESET_SUBJECT = "CareerPath — Đặt lại mật khẩu"
 
 # ── Plain Text Bodies ─────────────────────────────────────────────────────────
 
 REGISTER_OTP_PLAIN = """\
 Chào bạn,
 
-Mã OTP để hoàn tất đăng ký tài khoản TMA English Practice của bạn là: {otp}
+Mã OTP để hoàn tất đăng ký tài khoản CareerPath của bạn là: {otp}
 
 Mã này sẽ hết hạn sau {expiry_minutes} phút.
 
 Nếu bạn không yêu cầu đăng ký, vui lòng bỏ qua email này.
 
 Trân trọng,
-TMA English Practice Team
+CareerPath Team
 """
 
 PASSWORD_RESET_PLAIN = """\
 Chào bạn,
 
-Mã OTP để đặt lại mật khẩu TMA English Practice của bạn là: {otp}
+Mã OTP để đặt lại mật khẩu CareerPath của bạn là: {otp}
 
 Mã này sẽ hết hạn sau {expiry_minutes} phút.
 
 Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
 
 Trân trọng,
-TMA English Practice Team
+CareerPath Team
 """
 
 # ── HTML Bodies ───────────────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ REGISTER_OTP_HTML = """\
 <html>
 <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
   <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px; text-align: center;">
-    <h1 style="color: white; margin: 0;">TMA English Practice</h1>
+    <h1 style="color: white; margin: 0;">CareerPath</h1>
     <p style="color: rgba(255,255,255,0.9); margin-top: 8px;">Xác nhận đăng ký tài khoản</p>
   </div>
   <div style="padding: 30px 0;">
@@ -67,7 +67,7 @@ PASSWORD_RESET_HTML = """\
 <html>
 <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
   <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 30px; border-radius: 10px; text-align: center;">
-    <h1 style="color: white; margin: 0;">TMA English Practice</h1>
+    <h1 style="color: white; margin: 0;">CareerPath</h1>
     <p style="color: rgba(255,255,255,0.9); margin-top: 8px;">Đặt lại mật khẩu</p>
   </div>
   <div style="padding: 30px 0;">
@@ -89,7 +89,7 @@ PASSWORD_RESET_HTML = """\
 def build_register_otp_email(to_email: str, otp: str, expiry_minutes: str) -> EmailMessage:
     msg = EmailMessage()
     msg["Subject"] = REGISTER_OTP_SUBJECT
-    msg["From"] = f"TMA English Practice <{app_config.EMAIL_SENDER}>"
+    msg["From"] = f"CareerPath <{app_config.EMAIL_SENDER}>"
     msg["To"] = to_email
     msg.set_content(REGISTER_OTP_PLAIN.format(otp=otp, expiry_minutes=expiry_minutes))
     msg.add_alternative(REGISTER_OTP_HTML.format(otp=otp, expiry_minutes=expiry_minutes), subtype="html")
@@ -99,7 +99,7 @@ def build_register_otp_email(to_email: str, otp: str, expiry_minutes: str) -> Em
 def build_password_reset_email(to_email: str, otp: str, expiry_minutes: str) -> EmailMessage:
     msg = EmailMessage()
     msg["Subject"] = PASSWORD_RESET_SUBJECT
-    msg["From"] = f"TMA English Practice <{app_config.EMAIL_SENDER}>"
+    msg["From"] = f"CareerPath <{app_config.EMAIL_SENDER}>"
     msg["To"] = to_email
     msg.set_content(PASSWORD_RESET_PLAIN.format(otp=otp, expiry_minutes=expiry_minutes))
     msg.add_alternative(PASSWORD_RESET_HTML.format(otp=otp, expiry_minutes=expiry_minutes), subtype="html")

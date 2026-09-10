@@ -59,4 +59,9 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Không tìm thấy tài khoản.",
         )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên.",
+        )
     return user

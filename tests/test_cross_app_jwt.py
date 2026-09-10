@@ -32,7 +32,7 @@ def test_cross_app_hs256_verification():
         access_token,
         app_config.JWT_SECRET_KEY,
         algorithms=["HS256"],
-        issuer="https://english-practice.tma.com.vn/auth",
+        issuer=app_config.JWT_ISSUER,
         options={"verify_aud": False},
     )
 
@@ -42,4 +42,4 @@ def test_cross_app_hs256_verification():
     assert decoded["token_type"] == "access"
     assert "toeic" in decoded["aud"]
     assert "careerpath" in decoded["aud"]
-    assert decoded["iss"] == "https://english-practice.tma.com.vn/auth"
+    assert decoded["iss"] == app_config.JWT_ISSUER
