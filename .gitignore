@@ -5,7 +5,9 @@
 
 # RSA keys
 keys/
-
+#
+.certs/
+*.pem
 # OTP disk cache
 _otp_cache/
 

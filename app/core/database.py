@@ -22,9 +22,14 @@ engine = create_engine(
         "connect_timeout": app_config.DB_CONNECT_TIMEOUT,
         "read_timeout": app_config.DB_READ_TIMEOUT,
         "write_timeout": app_config.DB_WRITE_TIMEOUT,
+        "ssl": {
+            "ca": app_config.MYSQL_CA_CERT,
+        },
+        "init_command": (
+            "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED"
+        ),
     },
 )
-
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

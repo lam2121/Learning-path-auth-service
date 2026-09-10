@@ -10,11 +10,12 @@ class AppConfig(BaseSettings):
     """
 
     # ── Database ──────────────────────────────────────────────────────────
-    MYSQL_HOST: str = "localhost"
-    MYSQL_USER: str = "root"
+    MYSQL_HOST: str = ""
+    MYSQL_USER: str = ""
     MYSQL_PASSWORD: str = ""
-    MYSQL_DB: str = "auth_db"
+    MYSQL_DB: str = ""
     MYSQL_PORT: int = 3306
+    MYSQL_CA_CERT: str = ""
 
     # Connection pool
     DB_POOL_MIN_SIZE: int = 5
@@ -31,7 +32,7 @@ class AppConfig(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # Issuer / audience embedded in every JWT
-    JWT_ISSUER: str = "https://english-practice.tma.com.vn/auth"
+    JWT_ISSUER: str = "https://api.builtbylam.com"
     JWT_AUDIENCE: str = "toeic,careerpath"
 
     # ── OTP ───────────────────────────────────────────────────────────────
@@ -49,7 +50,7 @@ class AppConfig(BaseSettings):
     EMAIL_SMTP_PORT: int = 465
 
     # ── Cookie (SSO) ─────────────────────────────────────────────────────
-    COOKIE_DOMAIN: str = "localhost"
+    COOKIE_DOMAIN: str = ".builtbylam.com"
     COOKIE_SECURE: bool = False
     COOKIE_SAMESITE: str = "lax"
 
